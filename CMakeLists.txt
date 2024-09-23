@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.12)
 
 include(pico_sdk_import.cmake)
 
+IF (CMAKE_HOST_WIN32)
+set(picotool_DIR ${CMAKE_CURRENT_LIST_DIR}/tools/picotool/lib/cmake/picotool)
+ENDIF ()
+
 set(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_LIST_DIR}/freertos)
 include(freertos/portable/ThirdParty/GCC/RP2350_ARM_NTZ/FreeRTOS_Kernel_import.cmake)
 
