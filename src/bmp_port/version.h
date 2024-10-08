@@ -1,0 +1,1 @@
+#define FIRMWARE_VERSION "v1.10.0-1225-ga1dd3f6d"

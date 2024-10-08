@@ -58,14 +58,32 @@ struct _probe {
 };
 
 static struct _probe probe;
+static uint swclk_actual_freq;
 
 void probe_set_swclk_freq(uint freq_khz) {
-        uint clk_sys_freq_khz = clock_get_hz(clk_sys) / 1000;
-        probe_info("Set swclk freq %dKHz sysclk %dkHz\n", freq_khz, clk_sys_freq_khz);
-        uint32_t divider = clk_sys_freq_khz / freq_khz / 4;
-        if (divider == 0)
-            divider = 1;
-        pio_sm_set_clkdiv_int_frac(pio0, PROBE_SM, divider, 0);
+    uint clk_sys_freq_khz = clock_get_hz(clk_sys) / 1000;
+    probe_info("Set swclk freq %dKHz sysclk %dkHz\n", freq_khz, clk_sys_freq_khz);
+    #if 0
+    uint32_t divider = clk_sys_freq_khz / freq_khz / 4;
+    if (divider == 0)
+        divider = 1;
+    pio_sm_set_clkdiv_int_frac(pio0, PROBE_SM, divider, 0);
+    #else
+    float divider = (float)clk_sys_freq_khz / freq_khz / 4;
+    if(divider < 1.0f){
+        divider = 1.0f;
+    }
+    uint16_t div_int;
+    uint8_t div_frac;
+    pio_calculate_clkdiv_from_float(divider, &div_int, &div_frac);
+    pio_sm_set_clkdiv_int_frac(pio0, PROBE_SM, div_int, div_frac);
+
+    swclk_actual_freq = (float)clk_sys_freq_khz / divider / 4;
+    #endif
+}
+
+uint probe_get_swclk_freq(void){
+    return swclk_actual_freq;
 }
 
 void probe_assert_reset(bool state)
@@ -166,6 +184,7 @@ void probe_init() {
 
 void probe_deinit(void)
 {
+#if 0
   if (probe.initted) {
     probe_read_mode();
     pio_sm_set_enabled(pio0, PROBE_SM, 0);
@@ -175,4 +194,5 @@ void probe_deinit(void)
 
     probe.initted = 0;
   }
+#endif
 }

@@ -71,6 +71,8 @@ enum
   ITF_NUM_PROBE, // Old versions of Keil MDK only look at interface 0
   ITF_NUM_CDC_COM,
   ITF_NUM_CDC_DATA,
+  ITF_NUM_GDB,
+  ITF_NUM_GDB_DATA,
   ITF_NUM_TOTAL
 };
 
@@ -79,11 +81,14 @@ enum
 #define CDC_DATA_IN_EP_NUM 0x83
 #define DAP_OUT_EP_NUM 0x04
 #define DAP_IN_EP_NUM 0x85
+#define EPNUM_GDB_NOTIF   0x86
+#define EPNUM_GDB_OUT     0x07
+#define EPNUM_GDB_IN      0x88
 
 #if (PROBE_DEBUG_PROTOCOL == PROTO_DAP_V1)
-#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_HID_INOUT_DESC_LEN)
+#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN * CFG_TUD_CDC + TUD_HID_INOUT_DESC_LEN)
 #else
-#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_VENDOR_DESC_LEN)
+#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN * CFG_TUD_CDC + TUD_VENDOR_DESC_LEN)
 #endif
 
 static uint8_t const desc_hid_report[] =
@@ -113,6 +118,8 @@ uint8_t desc_configuration[] =
 #endif
   // Interface 1 + 2
   TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_COM, 6, CDC_NOTIFICATION_EP_NUM, 64, CDC_DATA_OUT_EP_NUM, CDC_DATA_IN_EP_NUM, 64),
+  // Interface 3 + 4
+  TUD_CDC_DESCRIPTOR(ITF_NUM_GDB, 7, EPNUM_GDB_NOTIF, 64, EPNUM_GDB_OUT, EPNUM_GDB_IN, 64),
 };
 
 // Invoked when received GET CONFIGURATION DESCRIPTOR
@@ -140,6 +147,7 @@ char const* string_desc_arr [] =
   "CMSIS-DAP v1 Interface", // 4: Interface descriptor for HID transport
   "CMSIS-DAP v2 Interface", // 5: Interface descriptor for Bulk transport
   "CDC-ACM UART Interface", // 6: Interface descriptor for CDC
+  "Black Magic GDB Server", // 7: Interface descriptor for CDC
 };
 
 static uint16_t _desc_str[32];

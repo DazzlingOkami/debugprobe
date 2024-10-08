@@ -35,6 +35,7 @@
 #endif
 
 void probe_set_swclk_freq(uint freq_khz);
+uint probe_get_swclk_freq(void);
 
 // Bit counts in the range 1..256
 void probe_write_bits(uint bit_count, uint32_t data_byte);

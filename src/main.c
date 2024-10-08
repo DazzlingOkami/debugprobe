@@ -45,6 +45,7 @@
 #include "led.h"
 #include "tusb_edpt_handler.h"
 #include "DAP.h"
+#include "bmp_main.h"
 
 // UART0 for debugprobe debug
 // UART1 for debugprobe to target device
@@ -57,8 +58,9 @@ static uint8_t RxDataBuffer[CFG_TUD_HID_EP_BUFSIZE];
 #define UART_TASK_PRIO (tskIDLE_PRIORITY + 3)
 #define TUD_TASK_PRIO  (tskIDLE_PRIORITY + 2)
 #define DAP_TASK_PRIO  (tskIDLE_PRIORITY + 1)
+#define BMP_TASK_PRIO  (tskIDLE_PRIORITY + 1)
 
-TaskHandle_t dap_taskhandle, tud_taskhandle;
+TaskHandle_t dap_taskhandle, tud_taskhandle, bmp_taskhandle;
 
 void usb_thread(void *ptr)
 {
@@ -105,6 +107,10 @@ int main(void) {
         xTaskCreate(usb_thread, "TUD", configMINIMAL_STACK_SIZE, NULL, TUD_TASK_PRIO, &tud_taskhandle);
         /* Lowest priority thread is debug - need to shuffle buffers before we can toggle swd... */
         xTaskCreate(dap_thread, "DAP", configMINIMAL_STACK_SIZE, NULL, DAP_TASK_PRIO, &dap_taskhandle);
+
+        /* BMP thread need more STACK size */
+        xTaskCreate(bmp_main, "BMP", 1024, NULL, BMP_TASK_PRIO, &bmp_taskhandle);
+
         vTaskStartScheduler();
     }
 
