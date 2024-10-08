@@ -1,4 +1,4 @@
-# Debugprobe
+# Debugprobe with Black Magic
 
 Firmware source for the Raspberry Pi Debug Probe SWD/UART accessory. Can also be run on a Raspberry Pi Pico.
 
@@ -6,10 +6,13 @@ Firmware source for the Raspberry Pi Debug Probe SWD/UART accessory. Can also be
 
 [Raspberry Pi Pico product page](https://www.raspberrypi.com/products/raspberry-pi-pico/)
 
+[Black Magic home page](https://black-magic.org/)
 
 # Documentation
 
 Debug Probe documentation can be found in the [Pico Getting Started Guide](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf). See "Appendix A: Using the Debug Probe".
+
+Black Magic Probe documentation can be found in the [Black Magic Probe Getting Started](https://black-magic.org/getting-started.html).
 
 # Hacking
 
@@ -17,12 +20,12 @@ For the purpose of making changes or studying of the code, you may want to compi
 
 First, clone the repository:
 ```
-git clone https://github.com/raspberrypi/debugprobe
+git clone https://github.com/DazzlingOkami/debugprobe
 cd debugprobe
 ```
 Initialize and update the submodules:
 ```
- git submodule update --init
+ git submodule update --init --depth=1
 ```
 Then create and switch to the build directory:
 ```
@@ -38,31 +41,14 @@ Run cmake and build the code:
 ```
 Done! You should now have a `debugprobe.uf2` that you can upload to your Debug Probe via the UF2 bootloader.
 
-If you want to create the version that runs on the Pico, then you need to invoke `cmake` in the sequence above with the `DEBUG_ON_PICO=ON` option:
-```
-cmake -DDEBUG_ON_PICO=ON ..
-```
+# Features
+It support for BMP debug mode compared to the official firmware. Contains relatively complete target support, but only implements the SWD interface.
 
-This will build with the configuration for the Pico and call the output program `debugprobe_on_pico.uf2`, as opposed to `debugprobe.uf2` for the accessory hardware.
+Refactored the code of the cdc_uart part and implemented a v2 version. It does not rely on the tud_cdc_connect() interface, which can make it more friendly to the upper computer.
 
-Note that if you first ran through the whole sequence to compile for the Debug Probe, then you don't need to start back at the top. You can just go back to the `cmake` step and start from there.
-
-# Building for the Pico 2
-
-If using an existing debugprobe clone:
-- You must completely regenerate your build directory, or use a different one.
-- You must also sync and update submodules as rp2350 needs a downstream FreeRTOS port for now.
-- `PICO_SDK_PATH` must point to a version 2.0.0 or greater install.
-
-
-```
-git submodule sync
-git submodule update --init
-mkdir build-pico2
-cd build-pico2
-cmake -DDEBUG_ON_PICO=1 -DPICO_BOARD=pico2 -DPICO_PLATFORM=rp2350 ../
-```
+Use decimal division mode for PIO to achieve more accurate SWD clock frequency.
 
 # TODO
-- AutoBaud selection, as PIO is a capable frequency counter
-- Possibly include RTT support
+1. BMP JTAG adapter support.
+2. BMP run and error LED compatible with Debugprobe.
+3. RTT support based on module within BMP.
