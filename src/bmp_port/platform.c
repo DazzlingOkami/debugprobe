@@ -34,8 +34,11 @@ static void platform_gpio_init(void *port, int pin, int is_out, int value){
 void platform_init(void)
 {
     platform_timing_init();
-    
     platform_gpio_init(PWR_BR_PORT, PWR_BR_PIN, 1, 0);
+
+    adc_init();
+    adc_gpio_init(26);
+    adc_select_input(0);
 
     probe_init();
 }
@@ -51,7 +54,12 @@ bool platform_nrst_get_val(void)
 
 const char *platform_target_voltage(void)
 {
-    return "Unknown";
+    static char ret[] = "0.0V";
+    uint32_t val = platform_target_voltage_sense();
+    ret[0] = '0' + val / 10U;
+    ret[2] = '0' + val % 10U;
+
+    return ret;
 }
 
 #ifdef PLATFORM_HAS_POWER_SWITCH
@@ -68,7 +76,8 @@ bool platform_target_set_power(const bool power)
 
 uint32_t platform_target_voltage_sense(void)
 {
-    return 0;
+    uint32_t result = adc_read();
+    return (result * 97u) / 8192u;
 }
 #endif
 

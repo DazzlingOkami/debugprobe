@@ -27,6 +27,8 @@
 #include "timing_rp2040.h"
 #include <pico/stdlib.h>
 #include "probe.h"
+#include "hardware/gpio.h"
+#include "hardware/adc.h"
 
 #define PLATFORM_IDENT      "(rp2040) "
 #define PLATFORM_HAS_POWER_SWITCH
