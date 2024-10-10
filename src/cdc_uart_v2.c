@@ -30,6 +30,7 @@
 #include "tusb.h"
 #include "probe_config.h"
 #include "ringbuf.h"
+#include "hardware/dma.h"
 
 #define RX_RINGBUF_SIZE (256)
 #define TX_RINGBUF_SIZE (1024)
@@ -55,6 +56,40 @@ static uint rx_led_debounce;
 
 #define CDC_INTERFACE 0
 
+#define DMA_OR_IRQ 1    // 1:DMA 0:IRQ
+
+#if DMA_OR_IRQ
+static int uart_tx_dma_ch;
+static int uart_rx_dma_ch;
+
+static int tx_dma_total = 0;
+static int rx_dma_total = 0;
+
+static void dma_irq0_handler() {
+    if(dma_channel_get_irq0_status(uart_tx_dma_ch)) {
+        dma_channel_acknowledge_irq0(uart_tx_dma_ch);
+
+        ringbuf_consume(&tx_ringbuf, tx_dma_total);
+
+        int tx_len = 0;
+        const char *tx_buf = ringbuf_get_ptr(&tx_ringbuf, &tx_len);
+        if(tx_len > 0){
+            tx_dma_total = tx_len;
+            dma_channel_transfer_from_buffer_now(uart_tx_dma_ch, tx_buf, tx_len);
+        }
+    }
+
+    if(dma_channel_get_irq0_status(uart_rx_dma_ch)) {
+        dma_channel_acknowledge_irq0(uart_rx_dma_ch);
+
+        int dma_xfer_len = rx_dma_total - dma_channel_hw_addr(uart_rx_dma_ch)->transfer_count;
+        ringbuf_produce(&rx_ringbuf, dma_xfer_len);
+
+        char* rx_buf = ringbuf_puts_ptr(&rx_ringbuf, &rx_dma_total);
+        dma_channel_transfer_to_buffer_now(uart_rx_dma_ch, rx_buf, rx_dma_total);
+    }
+}
+#else
 static void cdc_uart_irq_handler(void){
     if(uart_get_hw(PROBE_UART_INTERFACE)->ris & UART_UARTRIS_TXRIS_BITS){
         uart_get_hw(PROBE_UART_INTERFACE)->icr |= UART_UARTICR_TXIC_BITS;
@@ -75,6 +110,7 @@ static void cdc_uart_irq_handler(void){
         uart_get_hw(PROBE_UART_INTERFACE)->icr |= 0xFFFFFFFF;
     }
 }
+#endif
 
 void cdc_uart_init(void) {
     gpio_set_function(PROBE_UART_TX, GPIO_FUNC_UART);
@@ -106,9 +142,39 @@ void cdc_uart_init(void) {
     gpio_put(PROBE_UART_DTR, 1);
 #endif
 
+#if DMA_OR_IRQ == 0
     uart_set_irq_enables(PROBE_UART_INTERFACE, true, true);
     irq_set_exclusive_handler(UART1_IRQ, cdc_uart_irq_handler);
     irq_set_enabled(UART1_IRQ, true);
+#else
+    uart_tx_dma_ch = dma_claim_unused_channel(true);
+    uart_rx_dma_ch = dma_claim_unused_channel(true);
+
+    dma_channel_config tx_config = dma_channel_get_default_config(uart_tx_dma_ch);
+    channel_config_set_transfer_data_size(&tx_config, DMA_SIZE_8);
+    channel_config_set_read_increment(&tx_config, true);
+    channel_config_set_write_increment(&tx_config, false);
+    channel_config_set_dreq(&tx_config, uart_get_dreq_num(PROBE_UART_INTERFACE, true));
+    dma_channel_set_write_addr(uart_tx_dma_ch, &(uart_get_hw(PROBE_UART_INTERFACE)->dr), false);
+    dma_channel_set_config(uart_tx_dma_ch, &tx_config, false);
+    dma_channel_set_irq0_enabled(uart_tx_dma_ch, true);
+
+    dma_channel_config rx_config = dma_channel_get_default_config(uart_rx_dma_ch);
+    channel_config_set_transfer_data_size(&rx_config, DMA_SIZE_8);
+    channel_config_set_read_increment(&rx_config, false);
+    channel_config_set_write_increment(&rx_config, true);
+    channel_config_set_dreq(&rx_config, uart_get_dreq_num(PROBE_UART_INTERFACE, false));
+    dma_channel_set_read_addr(uart_rx_dma_ch, &(uart_get_hw(PROBE_UART_INTERFACE)->dr), false);
+    dma_channel_set_config(uart_rx_dma_ch, &rx_config, false);
+    dma_channel_set_irq0_enabled(uart_rx_dma_ch, true);
+
+    irq_set_exclusive_handler(DMA_IRQ_0, dma_irq0_handler);
+    irq_set_enabled(DMA_IRQ_0, true);
+
+    /* start dma recv */
+    char* rx_buf = ringbuf_puts_ptr(&rx_ringbuf, &rx_dma_total);
+    dma_channel_transfer_to_buffer_now(uart_rx_dma_ch, rx_buf, rx_dma_total);
+#endif
 }
 
 bool cdc_task(void){
@@ -136,10 +202,24 @@ bool cdc_task(void){
             tud_cdc_n_read(CDC_INTERFACE, tx_buf, xfer_len);
             ringbuf_produce(&tx_ringbuf, xfer_len);
 
+#if DMA_OR_IRQ == 0
             while(uart_is_writable(PROBE_UART_INTERFACE) && ringbuf_elements(&tx_ringbuf) > 0){
                 char c = ringbuf_get(&tx_ringbuf);
                 uart_get_hw(PROBE_UART_INTERFACE)->dr = c;
             }
+#else
+            irq_set_enabled(DMA_IRQ_0, false);
+            if(dma_channel_is_busy(uart_tx_dma_ch) == false &&
+               dma_channel_get_irq0_status(uart_tx_dma_ch) == false){
+                int tx_len = 0;
+                const char *dma_buf = ringbuf_get_ptr(&tx_ringbuf, &tx_len);
+                tx_dma_total = tx_len;
+                if(tx_len > 0){
+                    dma_channel_transfer_from_buffer_now(uart_tx_dma_ch, dma_buf, tx_len);
+                }
+            }
+            irq_set_enabled(DMA_IRQ_0, true);
+#endif
         }
         keep_alive = true;
 
@@ -150,6 +230,15 @@ bool cdc_task(void){
     }
 
     if(tud_cdc_n_write_available(CDC_INTERFACE)){
+#if DMA_OR_IRQ
+        irq_set_enabled(DMA_IRQ_0, false);
+        int dma_xfer_len = rx_dma_total - dma_channel_hw_addr(uart_rx_dma_ch)->transfer_count;
+        if(dma_xfer_len > 0){
+            ringbuf_produce(&rx_ringbuf, dma_xfer_len);
+            rx_dma_total -= dma_xfer_len;
+        }
+        irq_set_enabled(DMA_IRQ_0, true);
+#endif
         const char* rx_buf;
         int rx_buf_len;
         rx_buf = ringbuf_get_ptr(&rx_ringbuf, &rx_buf_len);
@@ -206,7 +295,9 @@ void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* line_coding)
     tud_cdc_n_write_clear(CDC_INTERFACE);
     tud_cdc_n_read_flush(CDC_INTERFACE);
     uart_init(PROBE_UART_INTERFACE, line_coding->bit_rate);
+#if DMA_OR_IRQ == 0
     uart_set_irq_enables(PROBE_UART_INTERFACE, true, true);
+#endif
 
     ringbuf_reset(&rx_ringbuf);
     ringbuf_reset(&tx_ringbuf);

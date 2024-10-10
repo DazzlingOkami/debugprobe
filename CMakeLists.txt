@@ -117,6 +117,7 @@ target_link_libraries(debugprobe PRIVATE
         tinyusb_device
         tinyusb_board
         hardware_pio
+        hardware_dma
         hardware_adc
         FreeRTOS-Kernel
         FreeRTOS-Kernel-Heap1
