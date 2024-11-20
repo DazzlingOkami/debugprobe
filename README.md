@@ -42,11 +42,13 @@ Run cmake and build the code:
 Done! You should now have a `debugprobe.uf2` that you can upload to your Debug Probe via the UF2 bootloader.
 
 # Features
-It support for BMP debug mode compared to the official firmware. Contains relatively complete target support, but only implements the SWD interface.
+It support for BMP debug mode compared to the official firmware. It includes support for most targets, but only implements the SWD interface.
 
-Refactored the code of the cdc_uart part and implemented a v2 version. It does not rely on the tud_cdc_connect() interface, which can make it more friendly to the upper computer. I'm not sure if using DMA transfer would result in more efficient performance, but I did try it out. It achieves zero copy of data at the application layer.
+Refactored the code of the cdc_uart part and implemented a v2 version. It does not rely on the tud_cdc_connect() interface, which can make it more friendly to the host computer. I'm not sure if using DMA transfer would result in more efficient performance, but I did try it out. It achieves zero copy of data at the application layer.
 
-Use decimal division mode for PIO to achieve more accurate SWD clock frequency.
+Use floating point division mode for PIO to achieve more accurate SWD clock frequency.
+
+Optimize the dual core of MCU by using SMP with FreeRTOS.
 
 # TODO
 1. BMP JTAG adapter support.
