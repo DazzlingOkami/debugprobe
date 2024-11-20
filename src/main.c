@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2021 Raspberry Pi (Trading) Ltd.
  * Copyright (c) 2021 Peter Lawrence
+ * Copyright (C) 2024 WangGaoJie <kinghd1912@163.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
