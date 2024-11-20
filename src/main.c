@@ -111,6 +111,11 @@ int main(void) {
         /* BMP thread need more STACK size */
         xTaskCreate(bmp_main, "BMP", 1024, NULL, BMP_TASK_PRIO, &bmp_taskhandle);
 
+#if (configNUMBER_OF_CORES > 1)
+        vTaskCoreAffinitySet(uart_taskhandle, 1 << 0);
+        vTaskCoreAffinitySet(tud_taskhandle, 1 << 0);
+#endif
+
         vTaskStartScheduler();
     }
 
