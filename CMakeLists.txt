@@ -9,7 +9,7 @@ ENDIF ()
 set(PICO_NO_COPRO_DIS 1)
 
 set(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_LIST_DIR}/freertos)
-include(freertos/portable/ThirdParty/GCC/RP2350_ARM_NTZ/FreeRTOS_Kernel_import.cmake)
+include(FreeRTOS_Kernel_import.cmake)
 
 project(debugprobe)
 
@@ -21,7 +21,6 @@ endif ()
 
 add_executable(debugprobe
         src/probe_config.c
-        src/led.c
         src/main.c
         src/usb_descriptors.c
         src/probe.c
@@ -101,12 +100,20 @@ target_link_options(debugprobe PRIVATE -Wl,--print-memory-usage)
 
 option (DEBUG_ON_PICO "Compile firmware for the Pico instead of Debug Probe" OFF)
 if (DEBUG_ON_PICO)
-    target_compile_definitions (debugprobe PRIVATE 
+    target_compile_definitions (debugprobe PRIVATE
 	DEBUG_ON_PICO=1
     )
-    set_target_properties(debugprobe PROPERTIES 
-        OUTPUT_NAME "debugprobe_on_pico"
-    )
+    if (PICO_BOARD STREQUAL "pico")
+        set_target_properties(debugprobe PROPERTIES
+            OUTPUT_NAME "debugprobe_on_pico"
+        )
+    elseif (PICO_BOARD STREQUAL "pico2")
+        set_target_properties(debugprobe PROPERTIES
+            OUTPUT_NAME "debugprobe_on_pico2"
+        )
+    else ()
+        error("Unsupported board ${PICO_BOARD}" PICO_BOARD)
+    endif ()
 endif ()
 
 

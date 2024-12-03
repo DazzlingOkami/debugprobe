@@ -30,9 +30,8 @@
 #include <hardware/clocks.h>
 #include <hardware/gpio.h>
 
-#include "led.h"
 #include "probe_config.h"
-#include "probe.pio.h"
+#include "probe.h"
 #include "tusb.h"
 
 #define DIV_ROUND_UP(m, n)	(((m) + (n) - 1) / (n))
@@ -165,6 +164,7 @@ void probe_write_mode(void) {
 
 void probe_init() {
     if (!probe.initted) {
+        probe_gpio_init();
         uint offset = pio_add_program(pio0, &probe_program);
         probe.offset = offset;
 
@@ -191,7 +191,7 @@ void probe_deinit(void)
     pio_remove_program(pio0, &probe_program, probe.offset);
 
     probe_assert_reset(1);	// de-assert nRESET
-
+    probe_gpio_deinit();
     probe.initted = 0;
   }
 #endif

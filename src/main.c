@@ -43,10 +43,10 @@
 #include "probe.h"
 #include "cdc_uart.h"
 #include "get_serial.h"
-#include "led.h"
 #include "tusb_edpt_handler.h"
 #include "DAP.h"
 #include "bmp_main.h"
+#include "hardware/structs/usb.h"
 
 // UART0 for debugprobe debug
 // UART1 for debugprobe to target device
@@ -61,10 +61,44 @@ static uint8_t RxDataBuffer[CFG_TUD_HID_EP_BUFSIZE];
 #define DAP_TASK_PRIO  (tskIDLE_PRIORITY + 1)
 #define BMP_TASK_PRIO  (tskIDLE_PRIORITY + 1)
 
-TaskHandle_t dap_taskhandle, tud_taskhandle, bmp_taskhandle;
+TaskHandle_t bmp_taskhandle;
+TaskHandle_t dap_taskhandle, tud_taskhandle, mon_taskhandle;
+
+void dev_mon(void *ptr)
+{
+    uint32_t sof[3];
+    int i = 0;
+    TickType_t wake;
+    wake = xTaskGetTickCount();
+    do {
+        /* ~5 SOF events per tick */
+        xTaskDelayUntil(&wake, 100);
+        if (tud_connected() && !tud_suspended()) {
+            sof[i++] = usb_hw->sof_rd & USB_SOF_RD_BITS;
+            i = i % 3;
+        } else {
+            for (i = 0; i < 3; i++)
+                sof[i] = 0;
+        }
+        if ((sof[0] | sof[1] | sof[2]) != 0) {
+            if ((sof[0] == sof[1]) && (sof[1] == sof[2])) {
+                probe_info("Watchdog timeout! Resetting USBD\n");
+                /* uh oh, signal disconnect (implicitly resets the controller) */
+                tud_deinit(0);
+                /* Make sure the port got the message */
+                xTaskDelayUntil(&wake, 1);
+                tud_init(0);
+            }
+        }
+    } while (1);
+}
 
 void usb_thread(void *ptr)
 {
+#ifdef PROBE_USB_CONNECTED_LED
+    gpio_init(PROBE_USB_CONNECTED_LED);
+    gpio_set_dir(PROBE_USB_CONNECTED_LED, GPIO_OUT);
+#endif
     TickType_t wake;
     wake = xTaskGetTickCount();
     do {
@@ -75,8 +109,11 @@ void usb_thread(void *ptr)
         else
             gpio_put(PROBE_USB_CONNECTED_LED, 0);
 #endif
+        // If suspended or disconnected, delay for 1ms (20 ticks)
+        if (tud_suspended() || !tud_connected())
+            xTaskDelayUntil(&wake, 20);
         // Go to sleep for up to a tick if nothing to do
-        if (!tud_task_event_ready())
+        else if (!tud_task_event_ready())
             xTaskDelayUntil(&wake, 1);
     } while (1);
 }
@@ -98,13 +135,9 @@ int main(void) {
 
     DAP_Setup();
 
-    led_init();
-
     probe_info("Welcome to debugprobe!\n");
 
     if (THREADED) {
-        /* UART needs to preempt USB as if we don't, characters get lost */
-        xTaskCreate(cdc_thread, "UART", configMINIMAL_STACK_SIZE, NULL, UART_TASK_PRIO, &uart_taskhandle);
         xTaskCreate(usb_thread, "TUD", configMINIMAL_STACK_SIZE, NULL, TUD_TASK_PRIO, &tud_taskhandle);
         /* Lowest priority thread is debug - need to shuffle buffers before we can toggle swd... */
         xTaskCreate(dap_thread, "DAP", configMINIMAL_STACK_SIZE, NULL, DAP_TASK_PRIO, &dap_taskhandle);
@@ -117,6 +150,9 @@ int main(void) {
         vTaskCoreAffinitySet(tud_taskhandle, 1 << 0);
 #endif
 
+#if PICO_RP2040
+        xTaskCreate(dev_mon, "WDOG", configMINIMAL_STACK_SIZE, NULL, TUD_TASK_PRIO, &mon_taskhandle);
+#endif
         vTaskStartScheduler();
     }
 
@@ -199,6 +235,40 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
   return false;
 }
 #endif
+
+void tud_suspend_cb(bool remote_wakeup_en)
+{
+  probe_info("Suspended\n");
+  /* Join DAP and UART threads? Or just suspend them, for transparency */
+  vTaskSuspend(uart_taskhandle);
+  vTaskSuspend(dap_taskhandle);
+  /* slow down clk_sys for power saving ? */
+}
+
+void tud_resume_cb(void)
+{
+  probe_info("Resumed\n");
+  vTaskResume(uart_taskhandle);
+  vTaskResume(dap_taskhandle);
+}
+
+void tud_unmount_cb(void)
+{
+  probe_info("Disconnected\n");
+  vTaskSuspend(uart_taskhandle);
+  vTaskSuspend(dap_taskhandle);
+  vTaskDelete(uart_taskhandle);
+  vTaskDelete(dap_taskhandle);
+}
+
+void tud_mount_cb(void)
+{
+  probe_info("Connected, Configured\n");
+  /* UART needs to preempt USB as if we don't, characters get lost */
+  xTaskCreate(cdc_thread, "UART", configMINIMAL_STACK_SIZE, NULL, UART_TASK_PRIO, &uart_taskhandle);
+  /* Lowest priority thread is debug - need to shuffle buffers before we can toggle swd... */
+  xTaskCreate(dap_thread, "DAP", configMINIMAL_STACK_SIZE, NULL, DAP_TASK_PRIO, &dap_taskhandle);
+}
 
 void vApplicationTickHook (void)
 {
