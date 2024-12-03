@@ -34,11 +34,11 @@ add_executable(debugprobe
 )
 
 target_sources(debugprobe PRIVATE
-        CMSIS_5/CMSIS/DAP/Firmware/Source/DAP.c
-        CMSIS_5/CMSIS/DAP/Firmware/Source/JTAG_DP.c
-        CMSIS_5/CMSIS/DAP/Firmware/Source/DAP_vendor.c
-        CMSIS_5/CMSIS/DAP/Firmware/Source/SWO.c
-        #CMSIS_5/CMSIS/DAP/Firmware/Source/SW_DP.c
+        CMSIS-DAP/Firmware/Source/DAP.c
+        CMSIS-DAP/Firmware/Source/JTAG_DP.c
+        CMSIS-DAP/Firmware/Source/DAP_vendor.c
+        CMSIS-DAP/Firmware/Source/SWO.c
+        #CMSIS-DAP/Firmware/Source/SW_DP.c
         )
 
 file(GLOB BLACKMAGIC_FILE_LIST 
@@ -67,8 +67,8 @@ target_sources(debugprobe PRIVATE
         )
 
 target_include_directories(debugprobe PRIVATE
-        CMSIS_5/CMSIS/DAP/Firmware/Include/
-        CMSIS_5/CMSIS/Core/Include/
+        CMSIS-DAP/Firmware/Include/
+        CMSIS_6/CMSIS/Core/Include/
         include/
         blackmagic/src/
         blackmagic/src/include/

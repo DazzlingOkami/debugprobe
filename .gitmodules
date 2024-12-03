@@ -1,9 +1,12 @@
-[submodule "CMSIS_5"]
-	path = CMSIS_5
-	url = https://github.com/ARM-software/CMSIS_5
 [submodule "freertos"]
 	path = freertos
 	url = https://github.com/raspberrypi/FreeRTOS-Kernel
 [submodule "blackmagic"]
 	path = blackmagic
 	url = https://github.com/blackmagic-debug/blackmagic.git
+[submodule "CMSIS-DAP"]
+	path = CMSIS-DAP
+	url = https://github.com/ARM-software/CMSIS-DAP.git
+[submodule "CMSIS_6"]
+	path = CMSIS_6
+	url = https://github.com/ARM-software/CMSIS_6.git
