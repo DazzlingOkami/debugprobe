@@ -40,7 +40,7 @@
 #define RTT_USB_PORT (0)
 
 /* rtt host to target: read one character */
-int32_t rtt_getchar()
+int32_t rtt_getchar(const uint32_t channel)
 {
 #ifdef ENABLE_RTT
     if(tud_cdc_n_available(RTT_USB_PORT)){
@@ -51,7 +51,7 @@ int32_t rtt_getchar()
 }
 
 /* rtt host to target: true if no characters available for reading */
-bool rtt_nodata()
+bool rtt_nodata(const uint32_t channel)
 {
 #ifdef ENABLE_RTT
     return tud_cdc_n_available(RTT_USB_PORT) == 0;
@@ -61,7 +61,7 @@ bool rtt_nodata()
 }
 
 /* rtt target to host: write string */
-uint32_t rtt_write(const char *buf, uint32_t len)
+uint32_t rtt_write(const uint32_t channel, const char *buf, uint32_t len)
 {
 #ifdef ENABLE_RTT
     if(tud_cdc_n_connected(RTT_USB_PORT) == false){
