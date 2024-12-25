@@ -81,6 +81,9 @@ static inline void probe_gpio_init()
 #endif
     // Funcsel pins
     pio_gpio_init(pio0, PROBE_PIN_SWCLK);
+#ifdef PROBE_IO_SWDI
+    pio_gpio_init(pio0, PROBE_PIN_SWDI);
+#endif
     pio_gpio_init(pio0, PROBE_PIN_SWDIO);
     // Make sure SWDIO has a pullup on it. Idle state is high
     gpio_pull_up(PROBE_PIN_SWDIO);
@@ -95,6 +98,10 @@ static inline void probe_gpio_deinit()
 #endif
 	gpio_deinit(PROBE_PIN_SWCLK);
 	gpio_disable_pulls(PROBE_PIN_SWCLK);
+#ifdef PROBE_IO_SWDI
+    gpio_deinit(PROBE_PIN_SWDI);
+	gpio_disable_pulls(PROBE_PIN_SWDI);
+#endif
 	gpio_deinit(PROBE_PIN_SWDIO);
 	gpio_disable_pulls(PROBE_PIN_SWDIO);
 }
