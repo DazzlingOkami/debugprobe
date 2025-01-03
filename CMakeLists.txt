@@ -39,6 +39,7 @@ target_sources(debugprobe PRIVATE
         CMSIS-DAP/Firmware/Source/SWO.c
         #CMSIS-DAP/Firmware/Source/SW_DP.c
         )
+set_source_files_properties(CMSIS-DAP/Firmware/Source/DAP.c PROPERTIES COMPILE_FLAGS -Wno-unused-variable)
 
 file(GLOB BLACKMAGIC_FILE_LIST 
         blackmagic/src/target/*.c
