@@ -264,9 +264,6 @@ void tud_mount_cb(void)
   xTaskCreate(cdc_thread, "UART", configMINIMAL_STACK_SIZE, NULL, UART_TASK_PRIO, &uart_taskhandle);
   /* Lowest priority thread is debug - need to shuffle buffers before we can toggle swd... */
   xTaskCreate(dap_thread, "DAP", configMINIMAL_STACK_SIZE, NULL, DAP_TASK_PRIO, &dap_taskhandle);
-#if (configNUMBER_OF_CORES > 1)
-  vTaskCoreAffinitySet(uart_taskhandle, 1 << 0);
-#endif
 }
 
 void vApplicationTickHook (void)

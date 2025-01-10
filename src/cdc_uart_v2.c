@@ -62,8 +62,8 @@ static uint rx_led_debounce;
 static int uart_tx_dma_ch;
 static int uart_rx_dma_ch;
 
-static int tx_dma_total = 0;
-static int rx_dma_total = 0;
+static volatile int tx_dma_total = 0;
+static volatile int rx_dma_total = 0;
 
 static void dma_irq0_handler() {
     if(dma_channel_get_irq0_status(uart_tx_dma_ch)) {
@@ -85,7 +85,7 @@ static void dma_irq0_handler() {
         int dma_xfer_len = rx_dma_total - dma_channel_hw_addr(uart_rx_dma_ch)->transfer_count;
         ringbuf_produce(&rx_ringbuf, dma_xfer_len);
 
-        char* rx_buf = ringbuf_puts_ptr(&rx_ringbuf, &rx_dma_total);
+        char* rx_buf = ringbuf_puts_ptr(&rx_ringbuf, (int*)&rx_dma_total);
         dma_channel_transfer_to_buffer_now(uart_rx_dma_ch, rx_buf, rx_dma_total);
     }
 }
@@ -172,7 +172,7 @@ void cdc_uart_init(void) {
     irq_set_enabled(DMA_IRQ_0, true);
 
     /* start dma recv */
-    char* rx_buf = ringbuf_puts_ptr(&rx_ringbuf, &rx_dma_total);
+    char* rx_buf = ringbuf_puts_ptr(&rx_ringbuf, (int*)&rx_dma_total);
     dma_channel_transfer_to_buffer_now(uart_rx_dma_ch, rx_buf, rx_dma_total);
 #endif
 }
@@ -200,15 +200,16 @@ bool cdc_task(void){
         int xfer_len = MIN(tx_buf_len, tud_cdc_n_available(CDC_INTERFACE));
         if(xfer_len > 0){
             tud_cdc_n_read(CDC_INTERFACE, tx_buf, xfer_len);
-            ringbuf_produce(&tx_ringbuf, xfer_len);
 
 #if DMA_OR_IRQ == 0
+            ringbuf_produce(&tx_ringbuf, xfer_len);
             while(uart_is_writable(PROBE_UART_INTERFACE) && ringbuf_elements(&tx_ringbuf) > 0){
                 char c = ringbuf_get(&tx_ringbuf);
                 uart_get_hw(PROBE_UART_INTERFACE)->dr = c;
             }
 #else
             irq_set_enabled(DMA_IRQ_0, false);
+            ringbuf_produce(&tx_ringbuf, xfer_len);
             if(dma_channel_is_busy(uart_tx_dma_ch) == false &&
                dma_channel_get_irq0_status(uart_tx_dma_ch) == false){
                 int tx_len = 0;
@@ -246,7 +247,13 @@ bool cdc_task(void){
         if(xfer_len > 0){
             tud_cdc_n_write(CDC_INTERFACE, rx_buf, xfer_len);
             tud_cdc_n_write_flush(CDC_INTERFACE);
+#if DMA_OR_IRQ
+            irq_set_enabled(DMA_IRQ_0, false);
             ringbuf_consume(&rx_ringbuf, xfer_len);
+            irq_set_enabled(DMA_IRQ_0, true);
+#else
+            ringbuf_consume(&rx_ringbuf, xfer_len);
+#endif
             keep_alive = true;
 
 #ifdef PROBE_UART_RX_LED
@@ -264,6 +271,11 @@ void cdc_thread(void *ptr)
     BaseType_t delayed;
     last_wake = xTaskGetTickCount();
     bool keep_alive;
+
+#if (configNUMBER_OF_CORES > 1)
+    vTaskCoreAffinitySet(NULL, 1 << 0);
+#endif
+
     /* Threaded with a polling interval that scales according to linerate */
     while (1) {
         keep_alive = cdc_task();
