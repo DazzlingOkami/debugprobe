@@ -119,6 +119,12 @@ void cdc_uart_init(void) {
     gpio_set_pulls(PROBE_UART_RX, 1, 0);
     uart_init(PROBE_UART_INTERFACE, PROBE_UART_BAUDRATE);
 
+    /* Clear the UART */
+    sleep_ms(10);
+    while(uart_is_readable(PROBE_UART_INTERFACE)){
+        uart_getc(PROBE_UART_INTERFACE);
+    }
+
 #ifdef PROBE_UART_HWFC
     /* HWFC implies that hardware flow control is implemented and the
      * UART operates in "full-duplex" mode (See USB CDC PSTN120 6.3.12).
@@ -266,6 +272,12 @@ bool cdc_task(void){
     return keep_alive;
 }
 
+static int uart_resetting;
+static uint32_t new_baudrate;
+static uint32_t new_data_bits;
+static uint32_t new_stop_bits;
+static uart_parity_t new_parity;
+
 void cdc_thread(void *ptr)
 {
     BaseType_t delayed;
@@ -280,9 +292,54 @@ void cdc_thread(void *ptr)
     while (1) {
         keep_alive = cdc_task();
         if (!keep_alive) {
-        delayed = xTaskDelayUntil(&last_wake, interval);
+            delayed = xTaskDelayUntil(&last_wake, interval);
             if (delayed == pdFALSE)
-            last_wake = xTaskGetTickCount();
+                last_wake = xTaskGetTickCount();
+        }
+
+        if(uart_resetting){
+            vTaskDelay(pdMS_TO_TICKS(50));
+            uart_resetting = 0;
+
+            /* Abort UART transfer */
+#if DMA_OR_IRQ == 1
+            irq_set_enabled(DMA_IRQ_0, false);
+            dma_channel_set_irq0_enabled(uart_rx_dma_ch, false);
+            dma_channel_abort(uart_rx_dma_ch);
+            dma_channel_acknowledge_irq0(uart_rx_dma_ch);
+            dma_channel_set_irq0_enabled(uart_tx_dma_ch, false);
+            dma_channel_abort(uart_tx_dma_ch);
+            dma_channel_acknowledge_irq0(uart_tx_dma_ch);
+#else
+            uart_set_irq_enables(PROBE_UART_INTERFACE, true, true);
+#endif
+
+            /* Disable the UART */
+            uart_deinit(PROBE_UART_INTERFACE);
+
+            /* Clear ringbuffers */
+            ringbuf_reset(&rx_ringbuf);
+            ringbuf_reset(&tx_ringbuf);
+            tud_cdc_n_write_clear(CDC_INTERFACE);
+            tud_cdc_n_read_flush(CDC_INTERFACE);
+
+            /* Reinitialize the UART */
+            uart_init(PROBE_UART_INTERFACE, new_baudrate);
+            uart_set_format(PROBE_UART_INTERFACE, new_data_bits, new_stop_bits, new_parity);
+            while(uart_is_readable(PROBE_UART_INTERFACE)){
+                uart_getc(PROBE_UART_INTERFACE);
+            }
+
+            /* Enable the UART IRQ */
+#if DMA_OR_IRQ == 1
+            dma_channel_set_irq0_enabled(uart_rx_dma_ch, true);
+            dma_channel_set_irq0_enabled(uart_tx_dma_ch, true);
+            irq_set_enabled(DMA_IRQ_0, true);
+            char* rx_buf = ringbuf_puts_ptr(&rx_ringbuf, (int*)&rx_dma_total);
+            dma_channel_transfer_to_buffer_now(uart_rx_dma_ch, rx_buf, rx_dma_total);
+#else
+            uart_set_irq_enables(PROBE_UART_INTERFACE, true, true);
+#endif
         }
     }
 }
@@ -303,16 +360,8 @@ void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* line_coding)
     debounce_ticks = MAX(1, configTICK_RATE_HZ / (interval * DEBOUNCE_MS));
     probe_info("New baud rate %ld micros %ld interval %lu\n",
                                     line_coding->bit_rate, micros, interval);
-    uart_deinit(PROBE_UART_INTERFACE);
-    tud_cdc_n_write_clear(CDC_INTERFACE);
-    tud_cdc_n_read_flush(CDC_INTERFACE);
-    uart_init(PROBE_UART_INTERFACE, line_coding->bit_rate);
-#if DMA_OR_IRQ == 0
-    uart_set_irq_enables(PROBE_UART_INTERFACE, true, true);
-#endif
 
-    ringbuf_reset(&rx_ringbuf);
-    ringbuf_reset(&tx_ringbuf);
+    new_baudrate = line_coding->bit_rate;
 
     switch (line_coding->parity) {
     case CDC_LINE_CODING_PARITY_ODD:
@@ -357,7 +406,11 @@ void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* line_coding)
     break;
     }
 
-    uart_set_format(PROBE_UART_INTERFACE, data_bits, stop_bits, parity);
+    new_data_bits = data_bits;
+    new_stop_bits = stop_bits;
+    new_parity = parity;
+    uart_resetting = 1;
+
     vTaskResume(uart_taskhandle);
 }
 
