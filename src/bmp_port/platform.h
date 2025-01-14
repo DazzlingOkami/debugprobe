@@ -79,19 +79,11 @@
 #define LED_IDLE_RUN    23 // TODO
 #define LED_ERROR       24
 
-#define SET_RUN_STATE(state)      \
-    {                             \
-        running_status = (state); \
-    }
+#define SET_RUN_STATE(state)
 
 #define SET_IDLE_STATE(state)                       \
     {                                               \
         gpio_set_val(LED_PORT, LED_IDLE_RUN, !state);\
-    }
-
-#define SET_ERROR_STATE(state)                    \
-    {                                             \
-        gpio_set_val(LED_PORT, LED_ERROR, state); \
     }
 
 #define gpio_set(g, p)          gpio_put(p, 1)

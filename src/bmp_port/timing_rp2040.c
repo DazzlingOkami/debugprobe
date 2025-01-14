@@ -33,21 +33,10 @@
 
 #define rcc_ahb_frequency (125 * 1000 * 1000)
 
-bool running_status = false;
 uint32_t target_clk_divider = 0;
-
-static void morse_timer_callback(TimerHandle_t ptmr){
-    if (running_status)
-        gpio_toggle(LED_PORT, LED_IDLE_RUN);
-    SET_ERROR_STATE(morse_update());
-}
 
 void platform_timing_init(void)
 {
-    TimerHandle_t morse_tmr;
-    morse_tmr = xTimerCreate("morse", pdMS_TO_TICKS(MORSECNT), 
-        1, NULL, morse_timer_callback);
-    xTimerStart(morse_tmr, 0xffff);
 }
 
 void platform_delay(uint32_t ms)
@@ -57,7 +46,7 @@ void platform_delay(uint32_t ms)
 
 uint32_t platform_time_ms(void)
 {
-    return xTaskGetTickCount() * 1000u / configTICK_RATE_HZ;
+    return xTaskGetTickCount();
 }
 
 /*
@@ -77,6 +66,7 @@ void platform_max_frequency_set(const uint32_t frequency)
         probe_set_swclk_freq(frequency / 1000);
     }
     
+    /* For JTAG Bit-banging */
     uint32_t divisor = rcc_ahb_frequency - USED_SWD_CYCLES * frequency;
     /* If we now have an insanely big divisor, the above operation wrapped to a negative signed number. */
     if (divisor >= 0x80000000U) {
@@ -91,11 +81,5 @@ void platform_max_frequency_set(const uint32_t frequency)
 
 uint32_t platform_max_frequency_get(void)
 {
-    #if 0
-    uint32_t result = rcc_ahb_frequency;
-    result /= USED_SWD_CYCLES + CYCLES_PER_CNT * target_clk_divider * 2;
-    return result;
-    #else
     return probe_get_swclk_freq() * 1000u;
-    #endif
 }
